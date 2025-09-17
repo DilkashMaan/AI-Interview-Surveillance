@@ -1,0 +1,8 @@
+[phases.setup]
+aptPkgs = ["cmake", "g++", "make", "libboost-all-dev"]
+
+[phases.build]
+cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
+
+[start]
+cmd = "python main.py"
