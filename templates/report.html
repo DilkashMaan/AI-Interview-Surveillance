@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proctoring Report</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      .meta {
+        color: #555;
+        margin-bottom: 16px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+      }
+      th {
+        background: #f3f4f6;
+        text-align: left;
+      }
+      img {
+        max-width: 200px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Proctoring Report</h1>
+    <div id="summary" class="meta">Loading…</div>
+    <div class="grid">
+      <div>
+        <h3>Events</h3>
+        <table id="eventsTbl">
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>Type</th>
+              <th>Detail</th>
+              <th>Snapshot</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div>
+        <h3>Recording</h3>
+        <video id="rec" controls style="width: 100%"></video>
+      </div>
+    </div>
+
+    <script>
+      const sessionId = window.location.pathname.split("/").pop();
+      async function load() {
+        const res = await fetch(`/api/report/${sessionId}`);
+        const data = await res.json();
+        const summary = document.getElementById("summary");
+        summary.textContent = `Candidate: ${data.candidate} | Duration: ${
+          data.started_utc
+        } → ${data.ended_utc || "ongoing"} | Focus Lost: ${
+          data.num_focus_lost
+        }`;
+        const tbody = document.querySelector("#eventsTbl tbody");
+        tbody.innerHTML = "";
+        data.events.forEach((e) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${e.timestamp}</td><td>${e.event_type}</td><td>${
+            e.detail
+          }</td><td>${
+            e.snapshot ? `<img src="/${e.snapshot.replace("\\", "/")}"/>` : ""
+          }</td>`;
+          tbody.appendChild(tr);
+        });
+        const rec = document.getElementById("rec");
+        if (data.recording_path)
+          rec.src = `../recordings/${data.recording_path.split("/").pop()}`;
+      }
+      load();
+    </script>
+  </body>
+</html>
