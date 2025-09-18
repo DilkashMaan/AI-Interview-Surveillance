@@ -201,20 +201,25 @@
           const div = document.createElement("div");
           div.className = "session-card";
           div.innerHTML = `
-          <div class="session-meta">
-            <b>Session:</b> ${session.session_id}<br/>
-            <b>Started:</b> ${session.started_utc}<br/>
-            <b>Ended:</b> ${session.ended_utc || "ongoing"}
-          </div>
-          ${
-            session.recording_path
-              ? `<video controls src="/recordings/${session.recording_path
-                  .split(/[/\\]/)
-                  .pop()}"></video>`
-              : "<p>No recording</p>"
-          }
-          <div class="snapshots" id="snaps-${session.session_id}"></div>
-        `;
+  <div class="session-meta">
+    <b>Session:</b> ${session.session_id}<br/>
+    <b>Started:</b> ${session.started_utc}<br/>
+    <b>Ended:</b> ${session.ended_utc || "ongoing"}
+  </div>
+  ${
+    session.recording_path
+      ? `<video controls src="/recordings/${session.recording_path
+          .split(/[/\\]/)
+          .pop()}"></video>`
+      : "<p>No recording</p>"
+  }
+  <button onclick="downloadReport('${session.session_id}')"
+          style="margin:10px 0;padding:10px;border:none;border-radius:8px;
+                 background:#3b82f6;color:#fff;font-weight:600;cursor:pointer;">
+    ⬇ Download Report
+  </button>
+  <div class="snapshots" id="snaps-${session.session_id}"></div>
+`;
           container.appendChild(div);
 
           const rep = await fetch(`/api/report/${session.session_id}`);
@@ -238,6 +243,26 @@
       if (candidateFromUrl) {
         document.getElementById("candidateInput").value = candidateFromUrl;
         loadSessions();
+      }
+      async function downloadReport(sessionId) {
+        try {
+          const res = await fetch(`/api/report/download/${sessionId}`);
+          if (!res.ok) throw new Error("Failed to download");
+
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `report_${sessionId}.pdf`; // or .csv depending on backend
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+
+          window.URL.revokeObjectURL(url);
+        } catch (err) {
+          alert("Error downloading report: " + err.message);
+        }
       }
     </script>
   </body>
