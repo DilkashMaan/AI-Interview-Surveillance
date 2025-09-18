@@ -18,19 +18,23 @@ The **Cheating Surveillance System** is designed to detect cheating during Onlin
 
 ## Folder Structure
 ```
-cheating-surveillance/
+AI-Interview-Surveillance/
 │── models/                 # Contains trained YOLO weights and shape predictor model  
     |__ best_yolov8.pt
     |__ best_yolov12.pt
     |__ shape_predictor_68_face_landmarks.dat 
 │── log                     # Screenshots
 │── main.py                 # Entry point for real-time detection
+│──static/                  # Contains the indes and preview html pages
+│──templates/               # Contains the reports templates
 │── requirements.txt        # Required dependencies
 │── README.md               # Project documentation
 │── head_pose.py            # Head movement detection
 │── eye_movement.py         # Gaze Detection
 │── mobile_detection.py     # Mobile detection
-│── Demo_vid/               # Folder containing demo videos
+│── recordings/             # Folder containing recorded videos
+│── server.py               # Main file to run
+│──yolov8n.pt               # yolo Model
 ```
 
 ## Installation
@@ -65,7 +69,7 @@ Ensure you have the following installed:
 ### Running the Surveillance System
 To start real-time monitoring, run:
 ```bash
-python main.py
+python server.py
 ```
 
 ### How It Works
