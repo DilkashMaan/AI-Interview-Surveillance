@@ -1,168 +1,3 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Proctoring - Interview</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0f172a; color: #e5e7eb; }
-    header { padding: 12px 16px; background: #111827; border-bottom: 1px solid #1f2937; display: flex; gap: 8px; align-items: center; }
-    main { display: grid; grid-template-columns: 1fr 360px; gap: 16px; padding: 16px; }
-    .panel { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; }
-    video, img { width: 100%; border-radius: 8px; background: #000; }
-    .status { font-size: 14px; line-height: 1.4; }
-    .events { max-height: 50vh; overflow: auto; font-size: 13px; }
-    .row { display: flex; gap: 8px; align-items: center; }
-    label { color: #9ca3af; }
-    input, button { background: #0b1220; color: #e5e7eb; border: 1px solid #1f2937; border-radius: 6px; padding: 6px 8px; }
-    button { cursor: pointer; }
-    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #1f2937; }
-    .warn { position: fixed; left: 50%; transform: translateX(-50%); top: 8px; background: #b91c1c; color: #fff; padding: 8px 14px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.3); display:none; }
-  </style>
-  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" crossorigin="anonymous"></script>
-</head>
-<body>
-  <header>
-    <div class="row">
-      <label>Candidate:</label>
-      <input id="candidate" placeholder="Full Name" />
-    </div>
-    <div class="row">
-      <button id="startBtn">Start</button>
-      <button id="stopBtn" disabled>Stop</button>
-      <span class="pill" id="sessionPill">Idle</span>
-    </div>
-  </header>
-  <main>
-    <div id="warnBar" class="warn">Warning: Keep your head and eyes straight towards the screen</div>
-    <div class="panel">
-      <h3>Candidate Camera</h3>
-      <video id="cam" autoplay playsinline muted></video>
-      <h3>Analyzed Stream</h3>
-      <img id="processed" />
-      <canvas id="canvas" style="display:none"></canvas>
-    </div>
-    <div class="panel">
-      <h3>Live Status</h3>
-      <div class="status" id="status"></div>
-      <h3>Events</h3>
-      <div class="events" id="events"></div>
-      <div style="margin-top:12px">
-        <a id="reportLink" target="_blank">Open Report</a>
-      </div>
-    </div>
-  </main>
-
-  <script>
-    const cam = document.getElementById('cam');
-    const canvas = document.getElementById('canvas');
-    const processed = document.getElementById('processed');
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const statusDiv = document.getElementById('status');
-    const eventsDiv = document.getElementById('events');
-    const candidateInput = document.getElementById('candidate');
-    const sessionPill = document.getElementById('sessionPill');
-    const reportLink = document.getElementById('reportLink');
-    const warnBar = document.getElementById('warnBar');
-
-    let stream;
-    let socket;
-    let sessionId;
-    let mediaRecorder;
-    let recordedChunks = [];
-    let frameTimer;
-
-    function appendEvent(text) {
-      const el = document.createElement('div');
-      el.textContent = `${new Date().toLocaleTimeString()} - ${text}`;
-      eventsDiv.prepend(el);
-    }
-
-    async function start() {
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      sessionId = crypto.randomUUID();
-      sessionPill.textContent = sessionId;
-      reportLink.href = `/report/${sessionId}`;
-
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: true });
-      cam.srcObject = stream;
-
-      // Start recording
-      recordedChunks = [];
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-      mediaRecorder.onstop = uploadRecording;
-      mediaRecorder.start(1000);
-
-      // Socket
-      socket = io();
-      socket.on('connected', () => appendEvent('Connected to server'));
-      socket.on('status', (msg) => {
-        processed.src = msg.frame;
-        statusDiv.innerHTML = `
-          Head: <b>${msg.head_state}</b><br/>
-          Gaze: <b>${msg.gaze}</b><br/>
-          Faces: <b>${msg.num_faces}</b><br/>
-          Items: <b>${(msg.items||[]).join(', ') || 'None'}</b>
-        `;
-        const showWarn = !!msg.head_warning || !!msg.eye_warning;
-        warnBar.style.display = showWarn ? 'block' : 'none';
-        (msg.events||[]).forEach(e => {
-          if (e.type === 'item_detected') appendEvent(`Items: ${e.items.join(', ')}`);
-          else if (e.type === 'multiple_faces') appendEvent(`Multiple faces (${e.count})`);
-          else if (e.type === 'head_off') appendEvent('Head not straight >5s');
-          else if (e.type === 'eyes_off') appendEvent('Eyes not straight >5s');
-          else if (e.type === 'focus_lost') appendEvent('Focus lost >5s');
-          else if (e.type === 'no_face') appendEvent('No face >10s');
-        });
-      });
-
-      // Start sending frames
-      const [track] = stream.getVideoTracks();
-      const settings = track.getSettings();
-      const w = settings.width || 640;
-      const h = settings.height || 480;
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-
-      async function sendFrame() {
-        if (!socket || socket.disconnected) return;
-        ctx.drawImage(cam, 0, 0, w, h);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        socket.emit('frame', { image: dataUrl, session_id: sessionId, candidate: candidateInput.value || 'Anonymous' });
-      }
-      frameTimer = setInterval(sendFrame, 200); // ~5 FPS
-    }
-
-    function stop() {
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-      clearInterval(frameTimer);
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-      if (socket) socket.disconnect();
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    }
-
-    async function uploadRecording() {
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      const form = new FormData();
-      form.append('file', blob, `${sessionId}.webm`);
-      form.append('session_id', sessionId);
-      form.append('candidate', candidateInput.value || 'Anonymous');
-      await fetch('/api/upload_recording', { method: 'POST', body: form });
-      appendEvent('Recording uploaded');
-    }
-
-    startBtn.addEventListener('click', start);
-    stopBtn.addEventListener('click', stop);
-  </script>
-</body>
-</html>
-
- -->
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -170,101 +5,180 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Proctoring - Interview</title>
     <style>
+      :root {
+        --bg-dark: #0f172a;
+        --bg-panel: #1e293b;
+        --bg-header: #111827;
+        --border: #334155;
+        --text: #f1f5f9;
+        --text-muted: #94a3b8;
+        --primary: #3b82f6;
+        --danger: #ef4444;
+        --success: #22c55e;
+      }
+
       body {
-        font-family: Arial, sans-serif;
+        font-family: "Inter", system-ui, sans-serif;
         margin: 0;
         padding: 0;
-        background: #0f172a;
-        color: #e5e7eb;
+        background: var(--bg-dark);
+        color: var(--text);
       }
+
       header {
-        padding: 12px 16px;
-        background: #111827;
-        border-bottom: 1px solid #1f2937;
+        background: var(--bg-header);
+        border-bottom: 1px solid var(--border);
+        padding: 12px 20px;
         display: flex;
-        gap: 8px;
+        justify-content: space-between;
         align-items: center;
+      }
+
+      header .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      label {
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+
+      input {
+        background: var(--bg-dark);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+      }
+
+      button {
+        background: var(--primary);
+        border: none;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 14px;
+        color: white;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      button:disabled {
+        background: #475569;
+        cursor: not-allowed;
+      }
+      button:hover:not(:disabled) {
+        background: #2563eb;
+      }
+
+      .pill {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg-panel);
+        color: var(--text-muted);
       }
 
       main {
         display: grid;
-        grid-template-rows: auto auto;
-        gap: 16px;
+        gap: 20px;
+        padding: 20px;
+      }
+
+      .panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
         padding: 16px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+        transition: transform 0.2s;
+      }
+      .panel:hover {
+        transform: translateY(-2px);
+      }
+
+      h3 {
+        margin-top: 0;
+        font-size: 16px;
+        color: var(--text);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 6px;
+        margin-bottom: 12px;
       }
 
       .video-section {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
-      .panel {
-        background: #111827;
-        border: 1px solid #1f2937;
-        border-radius: 8px;
-        padding: 12px;
+        gap: 20px;
       }
 
       video,
       img {
         width: 100%;
         border-radius: 8px;
-        background: #000;
+        background: black;
+        border: 1px solid var(--border);
       }
 
       .status {
         font-size: 14px;
-        line-height: 1.4;
-      }
-      .events {
-        max-height: 40vh;
-        overflow: auto;
-        font-size: 13px;
-      }
-      .row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
+        line-height: 1.6;
+        color: var(--text-muted);
       }
 
-      label {
-        color: #9ca3af;
+      .events {
+        max-height: 40vh;
+        overflow-y: auto;
+        font-size: 13px;
+        padding-right: 4px;
       }
-      input,
-      button {
-        background: #0b1220;
-        color: #e5e7eb;
-        border: 1px solid #1f2937;
-        border-radius: 6px;
-        padding: 6px 8px;
+      .events div {
+        padding: 4px 0;
+        border-bottom: 1px dashed var(--border);
       }
-      button {
-        cursor: pointer;
+
+      a {
+        color: var(--primary);
+        font-size: 14px;
+        text-decoration: none;
       }
-      .pill {
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 12px;
-        border: 1px solid #1f2937;
+      a:hover {
+        text-decoration: underline;
       }
 
       .warn {
         position: fixed;
         left: 50%;
         transform: translateX(-50%);
-        top: 8px;
-        background: #b91c1c;
+        top: 12px;
+        background: var(--danger);
         color: #fff;
-        padding: 8px 14px;
+        padding: 10px 18px;
         border-radius: 8px;
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
         display: none;
+        font-weight: 500;
+        animation: fadeIn 0.3s ease-in-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -10px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
       }
 
       .bottom-section {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 16px;
+        gap: 20px;
       }
     </style>
     <script
@@ -275,21 +189,22 @@
   <body>
     <header>
       <div class="row">
-        <label>Candidate:</label>
+        <label for="candidate">Candidate:</label>
         <input id="candidate" placeholder="Full Name" />
       </div>
       <div class="row">
         <button id="startBtn">Start</button>
         <button id="stopBtn" disabled>Stop</button>
         <span class="pill" id="sessionPill">Idle</span>
+        <button id="historyBtn">History</button>
       </div>
     </header>
+
     <main>
       <div id="warnBar" class="warn">
-        Warning: Keep your head and eyes straight towards the screen
+        ⚠️ Keep your head and eyes straight towards the screen
       </div>
 
-      <!-- Top video section -->
       <div class="video-section">
         <div class="panel">
           <h3>Candidate Camera</h3>
@@ -302,7 +217,6 @@
         </div>
       </div>
 
-      <!-- Bottom section with reports/status -->
       <div class="bottom-section">
         <div class="panel">
           <h3>Live Status</h3>
@@ -310,13 +224,15 @@
           <h3>Events</h3>
           <div class="events" id="events"></div>
           <div style="margin-top: 12px">
-            <a id="reportLink" target="_blank">Open Report</a>
+            <a id="reportLink" target="_blank">📄 Open Report</a>
           </div>
         </div>
       </div>
     </main>
 
+    <!-- Scripts remain same -->
     <script>
+      const alertSound = new Audio("/static/alarm.mp3");
       const cam = document.getElementById("cam");
       const canvas = document.getElementById("canvas");
       const processed = document.getElementById("processed");
@@ -355,7 +271,6 @@
         });
         cam.srcObject = stream;
 
-        // Start recording
         recordedChunks = [];
         mediaRecorder = new MediaRecorder(stream, {
           mimeType: "video/webm;codecs=vp9,opus",
@@ -366,17 +281,16 @@
         mediaRecorder.onstop = uploadRecording;
         mediaRecorder.start(1000);
 
-        // Socket
         socket = io();
         socket.on("connected", () => appendEvent("Connected to server"));
         socket.on("status", (msg) => {
           processed.src = msg.frame;
           statusDiv.innerHTML = `
-          Head: <b>${msg.head_state}</b><br/>
-          Gaze: <b>${msg.gaze}</b><br/>
-          Faces: <b>${msg.num_faces}</b><br/>
-          Items: <b>${(msg.items || []).join(", ") || "None"}</b>
-        `;
+              Head: <b>${msg.head_state}</b><br/>
+              Gaze: <b>${msg.gaze}</b><br/>
+              Faces: <b>${msg.num_faces}</b><br/>
+              Items: <b>${(msg.items || []).join(", ") || "None"}</b>
+            `;
           const showWarn = !!msg.head_warning || !!msg.eye_warning;
           warnBar.style.display = showWarn ? "block" : "none";
           (msg.events || []).forEach((e) => {
@@ -391,9 +305,18 @@
             else if (e.type === "focus_lost") appendEvent("Focus lost >5s");
             else if (e.type === "no_face") appendEvent("No face >10s");
           });
+          if (msg.cheating_detected) {
+            warnBar.textContent = "⚠️ Cheating detected! Phone/item on desk!";
+            warnBar.style.display = "block";
+            alertSound.play();
+          } else {
+            // hide warning if no item
+            if (!msg.head_warning && !msg.eye_warning) {
+              warnBar.style.display = "none";
+            }
+          }
         });
 
-        // Start sending frames
         const [track] = stream.getVideoTracks();
         const settings = track.getSettings();
         const w = settings.width || 640;
@@ -412,7 +335,7 @@
             candidate: candidateInput.value || "Anonymous",
           });
         }
-        frameTimer = setInterval(sendFrame, 200); // ~5 FPS
+        frameTimer = setInterval(sendFrame, 200);
       }
 
       function stop() {
@@ -437,6 +360,19 @@
 
       startBtn.addEventListener("click", start);
       stopBtn.addEventListener("click", stop);
+      const historyBtn = document.getElementById("historyBtn");
+
+      historyBtn.addEventListener("click", () => {
+        const candidate = candidateInput.value.trim();
+        if (!candidate) {
+          alert("Please enter candidate name first.");
+          return;
+        }
+        window.open(
+          `/candidatereport?name=${encodeURIComponent(candidate)}`,
+          "_blank"
+        );
+      });
     </script>
   </body>
 </html>
