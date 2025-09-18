@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Camera Preview - Interview</title>
+    <style>
+      body {
+        background: #0f172a;
+        font-family: "Inter", sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #f1f5f9;
+      }
+      h1 {
+        margin-bottom: 20px;
+      }
+      video {
+        width: 480px;
+        height: 360px;
+        border-radius: 12px;
+        background: black;
+        border: 2px solid #334155;
+      }
+      .controls {
+        margin-top: 20px;
+        display: flex;
+        gap: 12px;
+      }
+      input {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        padding: 6px 10px;
+        color: #f1f5f9;
+        font-size: 14px;
+        outline: none;
+      }
+      button {
+        background: #3b82f6;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 14px;
+        color: white;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      button:hover {
+        background: #2563eb;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Camera Preview</h1>
+    <video id="previewCam" autoplay playsinline muted></video>
+
+    <div class="controls">
+      <input id="candidateName" placeholder="Enter your full name" />
+      <button id="startBtn">Start</button>
+      <button id="historyBtn">History</button>
+    </div>
+
+    <script>
+      const previewCam = document.getElementById("previewCam");
+      const startBtn = document.getElementById("startBtn");
+      const historyBtn = document.getElementById("historyBtn");
+      const candidateNameInput = document.getElementById("candidateName");
+      let stream;
+
+      // Access camera for preview
+      async function initCamera() {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 640, height: 480 },
+            audio: false,
+          });
+          previewCam.srcObject = stream;
+        } catch (err) {
+          alert("Camera access denied or unavailable.");
+          console.error(err);
+        }
+      }
+
+      startBtn.addEventListener("click", () => {
+        const name = candidateNameInput.value.trim();
+        if (!name) {
+          alert("Please enter your full name.");
+          return;
+        }
+        // Stop preview stream before redirect
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        // Redirect to index.html with candidate name in query
+        window.location.href = `index.html?candidate=${encodeURIComponent(
+          name
+        )}&autostart=1`;
+      });
+
+      historyBtn.addEventListener("click", () => {
+        const name = candidateNameInput.value.trim();
+        if (!name) {
+          alert("Please enter your full name first.");
+          return;
+        }
+        window.open(
+          `/candidatereport?name=${encodeURIComponent(name)}`,
+          "_blank"
+        );
+      });
+
+      initCamera();
+    </script>
+  </body>
+</html>
