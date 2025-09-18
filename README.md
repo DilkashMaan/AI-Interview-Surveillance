@@ -45,7 +45,7 @@ Ensure you have the following installed:
 ### Setup
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Sania-hasann/Cheating-Surveillance-System.git
+   [git clone https://github.com/Sania-hasann/Cheating-Surveillance-System.git](https://github.com/DilkashMaan/AI-Interview-Surveillance.git)
    cd Cheating-Surveillance-System
    ```
 2. Install dependencies:
