@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -89,6 +89,128 @@
         if (data.recording_path)
           rec.src = `../recordings/${data.recording_path.split("/").pop()}`;
       }
+      load();
+    </script>
+  </body>
+</html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proctoring Report</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+        background: #f9fafb;
+        color: #111827;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      .meta {
+        color: #555;
+        margin-bottom: 16px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        vertical-align: top;
+      }
+      th {
+        background: #f3f4f6;
+        text-align: left;
+      }
+      img {
+        max-width: 200px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      video {
+        border-radius: 6px;
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Proctoring Report</h1>
+    <div id="summary" class="meta">Loading…</div>
+    <div class="grid">
+      <div>
+        <h3>Events</h3>
+        <table id="eventsTbl">
+          <thead>
+            <tr>
+              <th>Time (UTC)</th>
+              <th>Type</th>
+              <th>Detail</th>
+              <th>Snapshot</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div>
+        <h3>Recording</h3>
+        <video id="rec" controls style="width: 100%"></video>
+      </div>
+    </div>
+
+    <script>
+      const sessionId = window.location.pathname.split("/").pop();
+
+      async function load() {
+        const res = await fetch(`/api/report/${sessionId}`);
+        const data = await res.json();
+
+        // Summary
+        const summary = document.getElementById("summary");
+        summary.textContent = `Candidate: ${data.candidate} | Duration: ${
+          data.started_utc
+        } → ${data.ended_utc || "ongoing"} | Focus Lost: ${
+          data.num_focus_lost
+        }`;
+
+        // Events
+        const tbody = document.querySelector("#eventsTbl tbody");
+        tbody.innerHTML = "";
+        data.events.forEach((e) => {
+          const tr = document.createElement("tr");
+          const snapshotCell = e.snapshot
+            ? `<img src="${e.snapshot.replace(/\\/g, "/")}" />`
+            : "";
+          tr.innerHTML = `
+            <td>${e.timestamp}</td>
+            <td>${e.event_type}</td>
+            <td>${e.detail}</td>
+            <td>${snapshotCell}</td>`;
+          tbody.appendChild(tr);
+        });
+
+        // Recording
+        const rec = document.getElementById("rec");
+        if (data.recording_path) {
+          rec.src = `/recordings/${data.recording_path
+            .replace(/\\/g, "/")
+            .split("/")
+            .pop()}`;
+        }
+      }
+
       load();
     </script>
   </body>
