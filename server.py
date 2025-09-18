@@ -5,11 +5,12 @@ import os
 import time
 import uuid
 import mysql.connector
-from datetime import datetime
-
+from datetime import datetime,timezone
 import cv2
+import io
+from reportlab.pdfgen import canvas
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory, render_template
+from flask import Flask, jsonify, request, send_from_directory, render_template,send_file
 from flask_socketio import SocketIO, emit
 from ultralytics import YOLO
 
@@ -129,9 +130,11 @@ def log_event(session_id: str, candidate: str, event_type: str, detail: str, sna
     conn = mysql.connector.connect(**DB_CONFIG)
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO events (session_id, candidate, event_type, detail, timestamp_utc, snapshot_path) VALUES (%s,%s,%s,%s,%s,%s)",
-        (session_id, candidate, event_type, detail, datetime.utcnow(), snapshot_path),
-    )
+    "INSERT INTO events (session_id, candidate, event_type, detail, timestamp_utc, snapshot_path) VALUES (%s,%s,%s,%s,%s,%s)",
+    (session_id, candidate, event_type, detail, datetime.now(timezone.utc), snapshot_path)
+)
+
+    
     conn.commit()
     conn.close()
 
@@ -144,7 +147,7 @@ def ensure_session(session_id: str, candidate: str) -> None:
     if row is None:
         cur.execute(
             "INSERT INTO sessions (id, candidate, started_utc) VALUES (%s,%s,%s)",
-            (session_id, candidate, datetime.utcnow()),
+            (session_id, candidate, datetime.now(timezone.utc)),
         )
         conn.commit()
     conn.close()
@@ -152,7 +155,7 @@ def ensure_session(session_id: str, candidate: str) -> None:
 
 @app.route("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    return send_from_directory(app.static_folder, "preview.html")
 
 
 @app.route("/recordings/<path:filename>")
@@ -210,6 +213,9 @@ def api_report(session_id: str):
 def report_page(session_id: str):
     return render_template("report.html", session_id=session_id)
 
+@app.route("/index.html")
+def serve_index():
+    return send_from_directory(app.static_folder, "index.html")
 
 @app.post("/api/upload_recording")
 def upload_recording():
@@ -227,7 +233,7 @@ def upload_recording():
     cur = conn.cursor()
     cur.execute(
         "UPDATE sessions SET ended_utc=%s, recording_path=%s WHERE id=%s",
-        (datetime.utcnow(), save_path, session_id),
+        (datetime.now(timezone.utc), save_path, session_id),
     )
     conn.commit()
     conn.close()
@@ -308,7 +314,7 @@ def on_frame(data):
                     if conf < 0.6:
                         continue
                     label = r.names.get(cls_id, str(cls_id)).lower()
-                    if label in {"cell phone", "book", "laptop", "keyboard", "mouse", "tablet"}:
+                    if label in {"cell phone", "book", "notebook", "paper", "sheet", "laptop", "keyboard", "mouse", "tablet"}:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
                         cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 165, 255), 2)
                         cv2.putText(processed_frame, f"{label} {conf:.2f}", (x1, max(10, y1 - 6)),
@@ -418,6 +424,49 @@ def candidate_sessions(name: str):
     conn.close()
     return jsonify({"candidate": name, "sessions": sessions})
 
+@app.route("/api/report/download/<session_id>")
+def download_report(session_id):
+    # Open DB connection
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cur = conn.cursor(dictionary=True)
+
+    # Fetch session
+    cur.execute("SELECT * FROM sessions WHERE id=%s", (session_id,))
+    session = cur.fetchone()
+    if not session:
+        conn.close()
+        return jsonify({"error": "Session not found"}), 404
+
+    # Fetch events
+    cur.execute("SELECT * FROM events WHERE session_id=%s", (session_id,))
+    events = cur.fetchall()
+    conn.close()
+
+    # Create PDF in memory
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer)
+    pdf.setFont("Helvetica", 12)
+    pdf.drawString(100, 800, f"Session Report - {session_id}")
+    pdf.drawString(100, 780, f"Candidate: {session['candidate']}")
+    y = 760
+    for e in events:
+        pdf.drawString(
+            100, y,
+            f"{e['timestamp_utc']} - {e['event_type']} ({e['detail']})"
+        )
+        y -= 20
+        if y < 100:
+            pdf.showPage()
+            y = 800
+    pdf.save()
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"report_{session_id}.pdf",
+        mimetype="application/pdf"
+    )
 
 def run():
     socketio.run(app, host="0.0.0.0", port=8000)
