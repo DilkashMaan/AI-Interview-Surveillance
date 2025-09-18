@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Candidate Dashboard</title>
+    <style>
+      /* Base Styles */
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Inter", Arial, sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+        line-height: 1.6;
+      }
+
+      /* Header */
+      header {
+        background: linear-gradient(90deg, #3b82f6, #6366f1);
+        color: #fff;
+        padding: 30px 40px;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      }
+      header h1 {
+        font-size: 2rem;
+        margin-bottom: 8px;
+      }
+      header p {
+        font-size: 1rem;
+        color: #dbeafe;
+      }
+
+      /* Main Content */
+      .container {
+        max-width: 1200px;
+        margin: 30px auto;
+        padding: 0 20px;
+      }
+
+      /* Search Section */
+      .search-section {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+      .search-section h2 {
+        font-size: 1.5rem;
+        margin-bottom: 12px;
+        color: #1e3a8a;
+      }
+      .search-bar {
+        display: inline-flex;
+        max-width: 500px;
+        width: 100%;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      }
+      .search-bar input {
+        flex: 1;
+        padding: 12px 15px;
+        border: none;
+        font-size: 14px;
+        outline: none;
+      }
+      .search-bar button {
+        padding: 12px 20px;
+        border: none;
+        background: #6366f1;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+      .search-bar button:hover {
+        background: #4f46e5;
+      }
+
+      /* Sessions Section */
+      .sessions-section h2 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        color: #1e40af;
+      }
+      .sessions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 20px;
+      }
+      .session-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.2s;
+      }
+      .session-card:hover {
+        transform: translateY(-4px);
+      }
+      .session-meta {
+        font-size: 14px;
+        color: #6b7280;
+        margin-bottom: 12px;
+      }
+      .session-meta b {
+        color: #111827;
+      }
+
+      video {
+        width: 100%;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        border: 1px solid #e5e7eb;
+      }
+      .snapshots {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+        gap: 8px;
+      }
+      .snapshots img {
+        width: 100%;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        transition: transform 0.2s;
+      }
+      .snapshots img:hover {
+        transform: scale(1.05);
+      }
+
+      /* Empty state */
+      .empty-state {
+        color: #6b7280;
+        text-align: center;
+        font-size: 16px;
+        margin-top: 20px;
+      }
+
+      /* Responsive */
+      @media (max-width: 480px) {
+        header h1 {
+          font-size: 1.5rem;
+        }
+        .search-bar {
+          flex-direction: column;
+        }
+        .search-bar button {
+          border-radius: 0 0 10px 10px;
+          margin-top: 5px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Candidate Dashboard</h1>
+      <p>Manage and review candidate sessions efficiently</p>
+    </header>
+
+    <div class="container">
+      <!-- Search Section -->
+      <div class="search-section">
+        <h2>Search Candidate</h2>
+        <div class="search-bar">
+          <input id="candidateInput" placeholder="Enter candidate name" />
+          <button onclick="loadSessions()">Search</button>
+        </div>
+      </div>
+
+      <!-- Sessions Section -->
+      <div class="sessions-section">
+        <h2>Sessions</h2>
+        <div id="sessions" class="sessions"></div>
+      </div>
+    </div>
+
+    <script>
+      async function loadSessions() {
+        const name = document.getElementById("candidateInput").value.trim();
+        if (!name) return;
+
+        const res = await fetch(`/api/candidate/${name}`);
+        const data = await res.json();
+
+        const container = document.getElementById("sessions");
+        container.innerHTML = "";
+
+        if (!data.sessions.length) {
+          container.innerHTML = `<div class="empty-state">No sessions found.</div>`;
+          return;
+        }
+
+        for (const session of data.sessions) {
+          const div = document.createElement("div");
+          div.className = "session-card";
+          div.innerHTML = `
+          <div class="session-meta">
+            <b>Session:</b> ${session.session_id}<br/>
+            <b>Started:</b> ${session.started_utc}<br/>
+            <b>Ended:</b> ${session.ended_utc || "ongoing"}
+          </div>
+          ${
+            session.recording_path
+              ? `<video controls src="/recordings/${session.recording_path
+                  .split(/[/\\]/)
+                  .pop()}"></video>`
+              : "<p>No recording</p>"
+          }
+          <div class="snapshots" id="snaps-${session.session_id}"></div>
+        `;
+          container.appendChild(div);
+
+          const rep = await fetch(`/api/report/${session.session_id}`);
+          const repData = await rep.json();
+          const snapsDiv = document.getElementById(
+            `snaps-${session.session_id}`
+          );
+          repData.events.forEach((e) => {
+            if (e.snapshot) {
+              const img = document.createElement("img");
+              img.src = `/log/${e.snapshot.split(/[/\\]/).pop()}`;
+              img.title = `${e.event_type} @ ${e.timestamp}`;
+              snapsDiv.appendChild(img);
+            }
+          });
+        }
+      }
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const candidateFromUrl = urlParams.get("name");
+      if (candidateFromUrl) {
+        document.getElementById("candidateInput").value = candidateFromUrl;
+        loadSessions();
+      }
+    </script>
+  </body>
+</html>
