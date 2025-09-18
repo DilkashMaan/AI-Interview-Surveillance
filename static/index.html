@@ -196,7 +196,7 @@
         <button id="startBtn">Start</button>
         <button id="stopBtn" disabled>Stop</button>
         <span class="pill" id="sessionPill">Idle</span>
-        <button id="historyBtn">History</button>
+        <!-- <button id="historyBtn">History</button> -->
       </div>
     </header>
 
@@ -373,6 +373,18 @@
           "_blank"
         );
       });
+      // Read query params from preview.html
+      const urlParams = new URLSearchParams(window.location.search);
+      const candidateFromURL = urlParams.get("candidate");
+      const autoStart = urlParams.get("autostart");
+
+      if (candidateFromURL) {
+        candidateInput.value = candidateFromURL;
+      }
+
+      if (autoStart === "1") {
+        startBtn.click();
+      }
     </script>
   </body>
 </html>
